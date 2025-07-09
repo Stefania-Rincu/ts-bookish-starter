@@ -10,6 +10,6 @@ This repo contains a starter Express server for use in the Bookish bootcamp exer
 2. Install [VSCode](https://code.visualstudio.com/download) (or another preferred editor). VSCode is recommended unless you have a strong preference otherwise due to its good compatibility with typescript, excellent community extensions and for consistency across all developers when pairing.
 3. Install the project dependencies with `npm install`.
 4. Run the code!
-     - Run in development mode with hot reloading with `npm run dev`
-     - Run without hot reloading using `npm start`
-     - You can check that the formatting of all files is acceptable using `npm run lint`
+    - Run in development mode with hot reloading with `npm run dev`
+    - Run without hot reloading using `npm start`
+    - You can check that the formatting of all files is acceptable using `npm run lint`
