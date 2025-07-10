@@ -25,7 +25,7 @@ class BookController {
                     `Error getting book with id = ${bookId}. Error message ${error}`,
                 );
                 return res.status(500).json({
-                    error: `Database SELECT * FROM BOOK WHERE id = ${bookId} failed!`,
+                    error: `Failed executing query: SELECT * FROM BOOK WHERE id = ${bookId}`,
                 });
             }
         });
@@ -66,9 +66,9 @@ class BookController {
         const selectRequest = new TediousRequest(selectQuery, (error) => {
             if (error) {
                 console.log(`Error getting all books. Error message ${error}`);
-                return res
-                    .status(500)
-                    .json({ error: 'Database SELECT * FROM BOOK failed!' });
+                return res.status(500).json({
+                    error: 'Failed executing query: SELECT * FROM BOOK',
+                });
             }
         });
 
@@ -96,11 +96,41 @@ class BookController {
     }
 
     createBook(req: Request, res: Response) {
-        // TODO: implement functionality
-        return res.status(500).json({
-            error: 'server_error',
-            error_description: 'Endpoint not implemented yet.',
+        const { id, title, isbn, num_copies } = req.body;
+        const insertQuery: string =
+            'INSERT INTO dbo.BOOK VALUES (@id, @title, @isbn, @num_copies)';
+
+        const insertRequest = new TediousRequest(insertQuery, (error) => {
+            if (error) {
+                console.log(`Failed to insert book. Error message ${error}`);
+                return res.status(500).json({
+                    error: `Failed to insert book. Error message ${error}`,
+                });
+            }
         });
+
+        insertRequest.addParameter('id', TYPES.Int, parseInt(id));
+        insertRequest.addParameter('title', TYPES.NVarChar, title);
+        insertRequest.addParameter('isbn', TYPES.NVarChar, isbn);
+        insertRequest.addParameter(
+            'num_copies',
+            TYPES.Int,
+            parseInt(num_copies),
+        );
+
+        insertRequest.on('requestCompleted', () => {
+            res.status(200).json({
+                message: 'Book inserted successfully.',
+                book: {
+                    id,
+                    title,
+                    isbn,
+                    num_copies,
+                },
+            });
+        });
+
+        connection.execSql(insertRequest);
     }
 }
 
