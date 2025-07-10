@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { Request as TediousRequest, TYPES } from 'tedious';
 import { Book } from '../models/book';
-import { connection } from '../databaseConnection';
+import { BookService } from '../services/bookService';
+import { AuthorService } from '../services/authorService';
+import { linkAuthorToBook } from '../services/authorBookService';
+
+const bookService = new BookService();
+const authorService = new AuthorService();
 
 class BookController {
     router: Router;
@@ -14,123 +18,65 @@ class BookController {
         this.router.post('/', this.createBook.bind(this));
     }
 
-    getBook(req: Request, res: Response) {
-        const bookId: number = parseInt(req.params.id);
-        const selectQuery: string = 'SELECT * FROM dbo.BOOK WHERE id = @id';
-        let book: Book = null;
-
-        const selectRequest = new TediousRequest(selectQuery, (error) => {
-            if (error) {
-                console.log(
-                    `Error getting book with id = ${bookId}. Error message ${error}`,
-                );
-                return res.status(500).json({
-                    error: `Failed executing query: SELECT * FROM BOOK WHERE id = ${bookId}`,
-                });
-            }
-        });
-
-        selectRequest.addParameter('id', TYPES.Int, bookId);
-
-        selectRequest.on('row', (columns) => {
-            const bookData = {};
-            columns.forEach((column) => {
-                bookData[column.metadata.colName] = column.value;
-            });
-
-            book = new Book(
-                bookData['id'],
-                bookData['title'],
-                bookData['isbn'],
-                bookData['num_copies'],
-            );
+    async getBook(req: Request, res: Response) {
+        try {
+            const bookId: number = parseInt(req.params.id);
+            const book: Book = await bookService.getBookById(bookId);
 
             res.json(book);
-        });
-
-        selectRequest.on('requestCompleted', () => {
-            if (book === null)
-                res.status(404).json({
-                    error: 'not_found',
-                    error_description: `Book with id = ${bookId} does not exist`,
-                });
-        });
-
-        connection.execSql(selectRequest);
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to get book. Error: ${error}',
+            });
+        }
     }
 
-    getAllBooks(req: Request, res: Response) {
-        const books: Book[] = [];
-        const selectQuery: string = 'SELECT * FROM dbo.BOOK';
-
-        const selectRequest = new TediousRequest(selectQuery, (error) => {
-            if (error) {
-                console.log(`Error getting all books. Error message ${error}`);
-                return res.status(500).json({
-                    error: 'Failed executing query: SELECT * FROM BOOK',
-                });
-            }
-        });
-
-        selectRequest.on('row', (columns) => {
-            const bookData = {};
-            columns.forEach((column) => {
-                bookData[column.metadata.colName] = column.value;
+    async getAllBooks(req: Request, res: Response) {
+        try {
+            const books: Book[] = await bookService.getAllBooks();
+            res.json(books);
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to get all books. Error: ${error}',
             });
+        }
+    }
 
-            const book: Book = new Book(
-                bookData['id'],
-                bookData['title'],
-                bookData['isbn'],
-                bookData['num_copies'],
+    async createBook(req: Request, res: Response) {
+        try {
+            const { title, isbn, num_copies, authors } = req.body;
+            const bookId: number = await bookService.insertBook(
+                title,
+                isbn,
+                parseInt(num_copies),
             );
 
-            books.push(book);
-        });
+            const authorNames: string = authors
+                .split(',')
+                .map((author: string): string => author.trim());
 
-        selectRequest.on('requestCompleted', () => {
-            return res.json(books);
-        });
-
-        connection.execSql(selectRequest);
-    }
-
-    createBook(req: Request, res: Response) {
-        const { id, title, isbn, num_copies } = req.body;
-        const insertQuery: string =
-            'INSERT INTO dbo.BOOK VALUES (@id, @title, @isbn, @num_copies)';
-
-        const insertRequest = new TediousRequest(insertQuery, (error) => {
-            if (error) {
-                console.log(`Failed to insert book. Error message ${error}`);
-                return res.status(500).json({
-                    error: `Failed to insert book. Error message ${error}`,
-                });
+            for (const authorName of authorNames) {
+                const authorId = await authorService.findOrCreateAuthor(
+                    authorName,
+                );
+                await linkAuthorToBook(authorId, bookId);
             }
-        });
 
-        insertRequest.addParameter('id', TYPES.Int, parseInt(id));
-        insertRequest.addParameter('title', TYPES.NVarChar, title);
-        insertRequest.addParameter('isbn', TYPES.NVarChar, isbn);
-        insertRequest.addParameter(
-            'num_copies',
-            TYPES.Int,
-            parseInt(num_copies),
-        );
-
-        insertRequest.on('requestCompleted', () => {
-            res.status(200).json({
-                message: 'Book inserted successfully.',
-                book: {
-                    id,
-                    title,
-                    isbn,
-                    num_copies,
+            return res.status(200).json({
+                message: 'Book created successfully.',
+                bookId: {
+                    id: bookId,
+                    title: title,
+                    isbn: isbn,
+                    num_copies: num_copies,
                 },
+                authorNames: authorNames,
             });
-        });
-
-        connection.execSql(insertRequest);
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to create book. Error: ${error}',
+            });
+        }
     }
 }
 
